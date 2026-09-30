@@ -2,10 +2,8 @@
 /**
  * 登录
 **/
-$verifycode = 1;
-
-//用 __DIR__ 定位，不依赖运行时的工作目录
-if(!function_exists("imagecreate") || !file_exists(__DIR__.'/code.php'))$verifycode=0;
+//滑块拼图验证：服务端不支持 GD 时自动跳过（与旧图形验证码的降级逻辑一致，由IP限速兜底）
+$puzzle_enabled = function_exists('imagecreate');
 define('IN_ADMIN', true);
 include("../includes/common.php");
 //登录失败按IP锁定：5次失败锁15分钟。计数记在服务端，清Cookie也绕不过。
@@ -25,18 +23,13 @@ if(isset($_POST['user']) && isset($_POST['pass'])){
 	//否则密码里带引号或反斜杠时永远对不上
 	$user=(string)$_POST['user'];
 	$pass=(string)$_POST['pass'];
-	$code=isset($_POST['code'])?(string)$_POST['code']:'';
-	//验证码一次性使用：验过即作废，同一个码不能反复提交
-	$vc_code=isset($_SESSION['vc_code'])?(string)$_SESSION['vc_code']:'';
-	unset($_SESSION['vc_code']);
 	$locked = login_throttle_locked($login_ip, $login_max_fail, $login_lock_time);
 	if ($locked > 0) {
 		$login_msg = '登录失败次数过多，请在'.ceil($locked/60).'分钟后重试！';
 		$login_msg_type = 'error';
-	}elseif ($verifycode==1 && ($code === '' || $vc_code === '' || strtolower($code) !== strtolower($vc_code))) {
-		//验证码错误也计入失败次数，否则可以靠刷验证码把限速耗过去
-		login_throttle_fail($login_ip, $login_lock_time);
-		$login_msg = '验证码错误！';
+	}elseif($puzzle_enabled && (!isset($_SESSION['puzzle_passed']) || $_SESSION['puzzle_passed'] !== true)) {
+		//滑块拼图未通过：就地提示，不计入IP失败次数（拼图自身带防爆破）
+		$login_msg = '请先完成滑动拼图验证！';
 		$login_msg_type = 'error';
 	}elseif($_SESSION['pass_error']>$login_max_fail) {
 		$login_msg = '用户名或密码不正确！';
@@ -45,6 +38,8 @@ if(isset($_POST['user']) && isset($_POST['pass'])){
 		//必须用 hash_equals 做二进制比较：== 会把两个纯数字串按数值比，'0123456' == '123456' 为真
 		login_throttle_reset($login_ip);
 		$_SESSION['pass_error']=0;
+		//滑块验证一次性：登录成功即作废，下次登录需重新拖拼图
+		unset($_SESSION['puzzle_passed']);
 		//登录成功换一个会话ID，避免会话固定攻击
 		session_regenerate_id(true);
 		$session=md5($user.$pass.$password_hash);
@@ -238,14 +233,40 @@ body {
 }
 .login-field__input::placeholder { color: #c0c4cc; }
 
-.login-captcha { display: flex; gap: 10px; align-items: stretch; }
-.login-captcha .login-field { flex: 1; }
-.login-captcha__img {
-    flex-shrink: 0; height: 44px; min-width: 118px; border-radius: 10px;
-    border: 1px solid var(--c-border); cursor: pointer; background: #fafafa;
-    transition: border-color .2s, box-shadow .2s, transform .15s;
+.login-captcha { display: flex; flex-direction: column; gap: 10px; }
+.puzzle-trigger {
+    display: flex; align-items: center; gap: 8px; width: 100%; height: 44px;
+    padding: 0 14px; border: 1px solid var(--c-border); border-radius: 10px;
+    background: #fff; cursor: pointer; font-size: 14px; color: var(--c-text-2);
+    transition: border-color .2s, box-shadow .2s, background .2s; font-family: inherit;
 }
-.login-captcha__img:hover { border-color: #91caff; box-shadow: 0 0 0 3px rgba(22,119,255,.08); transform: translateY(-1px); }
+.puzzle-trigger:hover { border-color: #91caff; }
+.puzzle-trigger__icon { width: 18px; height: 18px; color: #bfbfbf; flex-shrink: 0; }
+.puzzle-trigger__arrow { margin-left: auto; color: #c0c4cc; font-size: 16px; }
+.puzzle-trigger.is-passed { border-color: #95de64; background: #f6ffed; color: #389e0d; cursor: default; }
+.puzzle-trigger.is-passed .puzzle-trigger__icon { color: #52c41a; }
+.puzzle-trigger.is-passed .puzzle-trigger__arrow { display: none; }
+.puzzle-box { display: none; flex-direction: column; gap: 10px; padding: 12px; border: 1px solid var(--c-border-light); border-radius: 12px; background: #fafcff; }
+.puzzle-box.is-open { display: flex; }
+.puzzle-box__head { display: flex; align-items: center; font-size: 13px; color: var(--c-text-3); }
+.puzzle-box__btns { margin-left: auto; display: flex; gap: 4px; }
+.puzzle-box__btn { width: 24px; height: 24px; border: none; background: transparent; color: #999; cursor: pointer; font-size: 14px; border-radius: 6px; line-height: 1; }
+.puzzle-box__btn:hover { background: #eef3ff; color: var(--c-brand); }
+.puzzle-stage { position: relative; width: 320px; height: 160px; border-radius: 10px; overflow: hidden; background: #e6e6e6; user-select: none; -webkit-user-select: none; }
+.puzzle-stage img { display: block; width: 100%; height: 100%; pointer-events: none; }
+.puzzle-piece { position: absolute; top: 0; left: 0; width: 52px; height: 52px; box-shadow: 0 2px 8px rgba(0,0,0,.25); pointer-events: none; }
+.puzzle-track { position: relative; height: 40px; border-radius: 10px; background: #eef1f6; border: 1px solid var(--c-border-light); overflow: hidden; }
+.puzzle-track__fill { position: absolute; left: 0; top: 0; bottom: 0; width: 0; background: linear-gradient(90deg, rgba(22,119,255,.25), rgba(22,119,255,.45)); }
+.puzzle-track__hint { position: absolute; left: 0; right: 0; top: 0; bottom: 0; display: flex; align-items: center; justify-content: center; font-size: 12px; color: var(--c-text-3); pointer-events: none; }
+.puzzle-track.is-failed .puzzle-track__hint { color: #cf1322; }
+.puzzle-thumb {
+    position: absolute; left: 0; top: 0; bottom: 0; width: 40px; z-index: 2;
+    display: flex; align-items: center; justify-content: center;
+    background: linear-gradient(135deg, #1677ff, #4096ff); color: #fff;
+    border-radius: 9px; cursor: grab; box-shadow: 0 2px 6px rgba(22,119,255,.35);
+}
+.puzzle-thumb:active { cursor: grabbing; }
+.puzzle-thumb svg { width: 14px; height: 14px; }
 
 .login-submit {
     width: 100%; height: 44px; margin-top: 4px;
@@ -320,13 +341,33 @@ body {
                     <svg class="login-field__icon" viewBox="0 0 1024 1024" fill="currentColor"><path d="M512 64a256 256 0 0 1 256 256v128H256V320A256 256 0 0 1 512 64zm192 160v-64a192 192 0 1 0-384 0v64h384zM224 448h576a96 96 0 0 1 96 96v384a96 96 0 0 1-96 96H224a96 96 0 0 1-96-96V544a96 96 0 0 1 96-96z"/></svg>
                     <input class="login-field__input" type="password" autocomplete="off" placeholder="请输入密码" name="pass">
                 </div>
-                <?php if($verifycode==1){?>
+                <?php if($puzzle_enabled){?>
                 <div class="login-captcha">
-                    <div class="login-field">
-                        <svg class="login-field__icon" viewBox="0 0 1024 1024" fill="currentColor"><path d="M512 128 180 320v384l332 192 332-192V320L512 128zm0 71.2 245.5 141.6-245.5 141.6L266.5 340.8 512 199.2zM246 389.5l251 145.1v290.2L246 679.7V389.5zm532 0v290.2L527 824.8V534.6l251-145.1z"/></svg>
-                        <input class="login-field__input" type="text" autocomplete="off" placeholder="图形验证码" name="code" maxlength="6">
+                    <button type="button" class="puzzle-trigger" id="puzzleTrigger">
+                        <svg class="puzzle-trigger__icon" viewBox="0 0 1024 1024" fill="currentColor"><path d="M384 128a128 128 0 0 1 128 128v64H192v-64a128 128 0 0 1 192 0zm160 192v-64a160 160 0 0 0-320 0v64H128a32 32 0 0 0-32 32v544a32 32 0 0 0 32 32h640a32 32 0 0 0 32-32V352a32 32 0 0 0-32-32H544zm32 64v480H192V384h384z"/></svg>
+                        <span id="puzzleTriggerText">点击进行安全验证</span>
+                        <span class="puzzle-trigger__arrow">›</span>
+                    </button>
+                    <div class="puzzle-box" id="puzzleBox">
+                        <div class="puzzle-box__head">
+                            <span>拖动左边滑块完成上方拼图</span>
+                            <div class="puzzle-box__btns">
+                                <button type="button" class="puzzle-box__btn" id="puzzleRefresh" title="刷新">⟳</button>
+                                <button type="button" class="puzzle-box__btn" id="puzzleClose" title="关闭">×</button>
+                            </div>
+                        </div>
+                        <div class="puzzle-stage" id="puzzleStage">
+                            <img id="puzzleBgImg" alt="拼图" draggable="false">
+                            <div class="puzzle-piece" id="puzzlePiece"><img id="puzzlePieceImg" alt="" draggable="false"></div>
+                        </div>
+                        <div class="puzzle-track" id="puzzleTrack">
+                            <div class="puzzle-track__fill" id="puzzleTrackFill"></div>
+                            <span class="puzzle-track__hint" id="puzzleTrackHint">按住滑块，拖动完成拼图</span>
+                            <div class="puzzle-thumb" id="puzzleThumb">
+                                <svg viewBox="0 0 24 24" fill="currentColor"><path d="M5 6h14v2H5zm0 5h14v2H5zm0 5h14v2H5z"/></svg>
+                            </div>
+                        </div>
                     </div>
-                    <img class="login-captcha__img" src="./code.php" title="点击刷新验证码" alt="验证码" onclick="this.src='./code.php?'+Math.random()">
                 </div>
                 <?php }?>
                 <button type="submit" class="login-submit">登 录 系 统</button>
@@ -338,5 +379,137 @@ body {
         <span>copyright © <?php echo date('Y') ?> <?php echo htmlspecialchars($conf['title'], ENT_QUOTES, 'UTF-8') ?> · All Rights Reserved</span>
     </div>
 </div>
+<?php if($puzzle_enabled){?>
+<script>
+(function(){
+var box=document.getElementById('puzzleBox'),
+    trig=document.getElementById('puzzleTrigger'),
+    trigText=document.getElementById('puzzleTriggerText'),
+    bgImg=document.getElementById('puzzleBgImg'),
+    piece=document.getElementById('puzzlePiece'),
+    pieceImg=document.getElementById('puzzlePieceImg'),
+    track=document.getElementById('puzzleTrack'),
+    trackFill=document.getElementById('puzzleTrackFill'),
+    trackHint=document.getElementById('puzzleTrackHint'),
+    thumb=document.getElementById('puzzleThumb'),
+    refreshBtn=document.getElementById('puzzleRefresh'),
+    closeBtn=document.getElementById('puzzleClose'),
+    form=document.querySelector('.login-form'),
+    alertBox=document.querySelector('.login-alert');
+var S={token:'',ty:0,pieceW:52,passed:false,drag:false,loading:false,x:0,rangePiece:268,rangeThumb:220};
+function showMsg(msg,type){
+  if(alertBox){
+    alertBox.className='login-alert login-alert--'+(type||'error');
+    alertBox.textContent=msg;
+    alertBox.style.display='block';
+  }
+}
+function clearMsg(){ if(alertBox){ alertBox.style.display='none'; } }
+function calcRange(){
+  if(track.clientWidth>0){ S.rangeThumb=track.clientWidth-thumb.offsetWidth; }
+}
+function resetDrag(){
+  S.x=0; thumb.style.left='0px'; trackFill.style.width='0px';
+  piece.style.left='0px'; track.classList.remove('is-failed');
+  trackHint.textContent='按住滑块，拖动完成拼图'; trackHint.style.opacity='';
+}
+function loadPuzzle(){
+  if(S.loading||S.passed)return;
+  S.loading=true; clearMsg(); resetDrag();
+  var xhr=new XMLHttpRequest();
+  xhr.open('GET','./captcha.php?_='+Date.now(),true);
+  xhr.onreadystatechange=function(){
+    if(xhr.readyState!==4)return;
+    S.loading=false;
+    if(xhr.status===200){
+      var d=null; try{ d=JSON.parse(xhr.responseText); }catch(e){}
+      if(d&&d.code===0){
+        S.token=d.token;
+        bgImg.src=d.bg; pieceImg.src=d.piece;
+        piece.style.top=(d.piece_y||0)+'px';
+        box.classList.add('is-open');
+        calcRange();
+      }else{
+        box.classList.remove('is-open');
+        showMsg(d&&d.msg?d.msg:'验证加载失败，请重试','error');
+      }
+    }else{
+      box.classList.remove('is-open');
+      showMsg('验证加载失败，请重试','error');
+    }
+  };
+  xhr.send();
+}
+function verify(){
+  if(S.x<=0)return;
+  var fd=new FormData();
+  fd.append('x',S.x);
+  fd.append('token',S.token);
+  var xhr=new XMLHttpRequest();
+  xhr.open('POST','./captcha-check.php',true);
+  xhr.onreadystatechange=function(){
+    if(xhr.readyState!==4)return;
+    var ok=false,msg='';
+    if(xhr.status===200){
+      try{ var d=JSON.parse(xhr.responseText); ok=d.code===0; msg=d.msg||''; }catch(e){}
+    }
+    if(ok){
+      S.passed=true;
+      box.classList.remove('is-open');
+      trig.classList.add('is-passed');
+      trigText.textContent='✓ 安全验证通过';
+      clearMsg();
+    }else{
+      track.classList.add('is-failed');
+      trackHint.textContent=msg||'验证失败，请重新拖动';
+      setTimeout(resetDrag,700);
+    }
+  };
+  xhr.send(fd);
+}
+trig.addEventListener('click',function(){ if(!S.passed)loadPuzzle(); });
+refreshBtn.addEventListener('click',function(){ loadPuzzle(); });
+closeBtn.addEventListener('click',function(){ box.classList.remove('is-open'); resetDrag(); });
+function clientX(e){ return e.touches?e.touches[0].clientX:e.clientX; }
+var startX=0;
+function startDrag(e){
+  if(S.loading)return;
+  e.preventDefault();
+  S.drag=true; startX=clientX(e)-S.x;
+  trackHint.style.opacity='0';
+  document.addEventListener('mousemove',moveDrag);
+  document.addEventListener('mouseup',endDrag);
+  document.addEventListener('touchmove',moveDrag,{passive:false});
+  document.addEventListener('touchend',endDrag);
+}
+function moveDrag(e){
+  if(!S.drag)return;
+  e.preventDefault();
+  var nx=clientX(e)-startX;
+  if(nx<0)nx=0; if(nx>S.rangeThumb)nx=S.rangeThumb;
+  S.x=nx;
+  thumb.style.left=nx+'px';
+  trackFill.style.width=nx+'px';
+  piece.style.left=Math.round(nx*S.rangePiece/S.rangeThumb)+'px';
+}
+function endDrag(){
+  if(!S.drag)return;
+  S.drag=false;
+  document.removeEventListener('mousemove',moveDrag);
+  document.removeEventListener('mouseup',endDrag);
+  document.removeEventListener('touchmove',moveDrag);
+  document.removeEventListener('touchend',endDrag);
+  verify();
+}
+thumb.addEventListener('mousedown',startDrag);
+thumb.addEventListener('touchstart',startDrag,{passive:false});
+if(form){
+  form.addEventListener('submit',function(e){
+    if(!S.passed){ e.preventDefault(); showMsg('请先完成滑动拼图验证！','error'); }
+  });
+}
+})();
+</script>
+<?php }?>
 </body>
 </html>
