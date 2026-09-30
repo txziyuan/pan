@@ -247,12 +247,21 @@ body {
 .puzzle-trigger.is-passed .puzzle-trigger__icon { color: #52c41a; }
 .puzzle-trigger.is-passed .puzzle-trigger__arrow { display: none; }
 .puzzle-box {
-    display: none; position: absolute; left: 0; right: 0; top: calc(100% + 8px);
-    z-index: 30; flex-direction: column; gap: 10px; padding: 12px;
-    border: 1px solid #e6eefb; border-radius: 12px; background: #fff;
-    box-shadow: 0 14px 36px rgba(0,30,80,.18);
+    display: none; position: fixed; inset: 0; z-index: 60;
+    align-items: center; justify-content: center;
+    background: rgba(10,20,45,.45); padding: 16px;
 }
 .puzzle-box.is-open { display: flex; }
+.puzzle-card {
+    display: flex; flex-direction: column; gap: 10px; padding: 16px;
+    background: #fff; border-radius: 14px;
+    box-shadow: 0 20px 60px rgba(0,20,60,.35);
+}
+@media (max-width: 420px) {
+    .puzzle-box { padding: 10px; }
+    .puzzle-card { padding: 10px; width: 100%; }
+    .puzzle-stage { width: 100%; }
+}
 .puzzle-box__head { display: flex; align-items: center; font-size: 13px; color: var(--c-text-3); }
 .puzzle-box__btns { margin-left: auto; display: flex; gap: 4px; }
 .puzzle-box__btn { width: 24px; height: 24px; border: none; background: transparent; color: #999; cursor: pointer; font-size: 14px; border-radius: 6px; line-height: 1; }
@@ -354,6 +363,7 @@ body {
                         <span class="puzzle-trigger__arrow">›</span>
                     </button>
                     <div class="puzzle-box" id="puzzleBox">
+                        <div class="puzzle-card">
                         <div class="puzzle-box__head">
                             <span>拖动左边滑块完成上方拼图</span>
                             <div class="puzzle-box__btns">
@@ -371,6 +381,7 @@ body {
                             <div class="puzzle-thumb" id="puzzleThumb">
                                 <svg viewBox="0 0 24 24" fill="currentColor"><path d="M5 6h14v2H5zm0 5h14v2H5zm0 5h14v2H5z"/></svg>
                             </div>
+                        </div>
                         </div>
                     </div>
                 </div>
@@ -475,6 +486,7 @@ function verify(){
 trig.addEventListener('click',function(){ if(!S.passed)loadPuzzle(); });
 refreshBtn.addEventListener('click',function(){ loadPuzzle(); });
 closeBtn.addEventListener('click',function(){ box.classList.remove('is-open'); resetDrag(); });
+box.addEventListener('click',function(e){ if(e.target===box){ box.classList.remove('is-open'); resetDrag(); } });
 function clientX(e){ return e.touches?e.touches[0].clientX:e.clientX; }
 var startX=0;
 function startDrag(e){
