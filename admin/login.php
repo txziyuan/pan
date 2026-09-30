@@ -127,7 +127,7 @@ body {
     display: grid; grid-template-columns: 1.08fr 1fr;
     background: rgba(255,255,255,.92);
     backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
-    border-radius: 18px; overflow: hidden;
+    border-radius: 18px; overflow: visible;
     border: 1px solid rgba(255,255,255,.85);
     box-shadow: var(--shadow);
     animation: cardIn .55s cubic-bezier(.22,1,.36,1) both;
@@ -142,7 +142,7 @@ body {
 }
 
 .login-banner {
-    position: relative; min-height: 480px; overflow: hidden;
+    position: relative; min-height: 480px; overflow: hidden; border-radius: 18px 0 0 18px;
     background:
         radial-gradient(circle at 80% 16%, rgba(255,255,255,.13) 0%, transparent 34%),
         radial-gradient(circle at 12% 88%, rgba(0,20,60,.30) 0%, transparent 42%),
@@ -233,7 +233,7 @@ body {
 }
 .login-field__input::placeholder { color: #c0c4cc; }
 
-.login-captcha { display: flex; flex-direction: column; gap: 10px; }
+.login-captcha { position: relative; }
 .puzzle-trigger {
     display: flex; align-items: center; gap: 8px; width: 100%; height: 44px;
     padding: 0 14px; border: 1px solid var(--c-border); border-radius: 10px;
@@ -246,7 +246,12 @@ body {
 .puzzle-trigger.is-passed { border-color: #95de64; background: #f6ffed; color: #389e0d; cursor: default; }
 .puzzle-trigger.is-passed .puzzle-trigger__icon { color: #52c41a; }
 .puzzle-trigger.is-passed .puzzle-trigger__arrow { display: none; }
-.puzzle-box { display: none; flex-direction: column; gap: 10px; padding: 12px; border: 1px solid var(--c-border-light); border-radius: 12px; background: #fafcff; }
+.puzzle-box {
+    display: none; position: absolute; left: 0; right: 0; top: calc(100% + 8px);
+    z-index: 30; flex-direction: column; gap: 10px; padding: 12px;
+    border: 1px solid #e6eefb; border-radius: 12px; background: #fff;
+    box-shadow: 0 14px 36px rgba(0,30,80,.18);
+}
 .puzzle-box.is-open { display: flex; }
 .puzzle-box__head { display: flex; align-items: center; font-size: 13px; color: var(--c-text-3); }
 .puzzle-box__btns { margin-left: auto; display: flex; gap: 4px; }
@@ -443,7 +448,7 @@ function loadPuzzle(){
 function verify(){
   if(S.x<=0)return;
   var fd=new FormData();
-  fd.append('x',S.x);
+  fd.append('x',Math.round(S.x*S.rangePiece/S.rangeThumb));
   fd.append('token',S.token);
   var xhr=new XMLHttpRequest();
   xhr.open('POST','./captcha-check.php',true);
