@@ -1,3 +1,11 @@
+<style>
+/* 页脚贴底：内容不满一屏时，页脚固定在视口底部（布局型外观有自己的布局结构，不套用） */
+html{min-height:100%}
+body:not(.layout-theme):not(.studio-layout){min-height:100vh;display:-webkit-box;display:-ms-flexbox;display:flex;-webkit-box-orient:vertical;-ms-flex-direction:column;flex-direction:column}
+body:not(.layout-theme):not(.studio-layout)>.navbar{-webkit-box-flex:0;-ms-flex:0 0 auto;flex:0 0 auto}
+body:not(.layout-theme):not(.studio-layout)>div.container{-webkit-box-flex:1;-ms-flex:1 0 auto;flex:1 0 auto}
+body:not(.layout-theme):not(.studio-layout)>footer.footer{margin-top:auto}
+</style>
 <footer class="footer text-center">
       <div class="container">
         <p class="text-muted">Copyright &copy; <?php echo date('Y')?> <a href="/"><?php echo $conf['title']?></a> <?php echo $conf['tongji']?> </p>
