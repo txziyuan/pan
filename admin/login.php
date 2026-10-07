@@ -4,7 +4,7 @@
 **/
 //滑块拼图验证：服务端不支持 GD 时自动跳过（与旧图形验证码的降级逻辑一致，由IP限速兜底）
 //登录页banner背景图：base64按两段拆在 login-bg-1.inc / login-bg-2.inc，避免单文件过大
-$login_bg_b64 = (include __DIR__.'/login-bg-1.inc') . (include __DIR__.'/login-bg-2.inc');
+$login_bg_b64 = (include __DIR__.'/login-bg-1.inc').(include __DIR__.'/login-bg-2.inc').(include __DIR__.'/login-bg-3.inc').(include __DIR__.'/login-bg-4.inc');
 $puzzle_enabled = function_exists('imagecreate');
 define('IN_ADMIN', true);
 include("../includes/common.php");
