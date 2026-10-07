@@ -1,7 +1,8 @@
 <?php
 @header('Content-Type: text/html; charset=UTF-8');
 $site_theme = isset($conf['site_theme']) ? $conf['site_theme'] : default_site_theme();
-if(!in_array($site_theme, site_theme_keys(), true)){
+//enterprise 是企业门户风新增外观（site_theme_keys 尚未收录），这里单独放行，后台不跟着回退
+if(!in_array($site_theme, site_theme_keys(), true) && $site_theme !== 'enterprise'){
   $site_theme = default_site_theme();
 }
 //这四套是固定侧栏外观，菜单竖着排；其余都是顶部横向导航

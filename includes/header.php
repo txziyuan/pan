@@ -2,7 +2,9 @@
 @header('Content-Type: text/html; charset=UTF-8');
 //当前外观：<head> 里要用它输出自定义渐变，<body> 上要用它挂主题类名，算一次两处共用
 $site_theme = isset($conf['site_theme']) ? $conf['site_theme'] : default_site_theme();
-if(!in_array($site_theme, site_theme_keys(), true)){
+//enterprise 是本项目新增的企业门户风外观，site_theme_keys()（上游 functions.php）尚未收录，
+//这里单独放行，保证数据库里选了 enterprise 后前台不会悄悄回退成默认外观
+if(!in_array($site_theme, site_theme_keys(), true) && $site_theme !== 'enterprise'){
   $site_theme = default_site_theme();
 }
 ?><!DOCTYPE html>
@@ -25,8 +27,10 @@ if(!in_array($site_theme, site_theme_keys(), true)){
   <link href="https://s4.zstatic.net/ajax/libs/bootstrap-material-design/0.5.10/css/ripples.min.css" rel="stylesheet">
   <?php if($is_file){?><link rel="stylesheet" href="https://s4.zstatic.net/ajax/libs/aplayer/1.10.1/APlayer.min.css"><link href="assets/css/ckplayer.css" rel="stylesheet"><?php }?>
   <link href="assets/css/style.css?v=<?php echo asset_ver('assets/css/style.css')?>" rel="stylesheet">
+  <?php //企业门户风：独立样式表在 style.css 之后加载，用它覆盖全部组件，其余外观不引入 ?>
+  <?php if($site_theme === 'enterprise'){?><link href="assets/css/enterprise.css?v=<?php echo asset_ver('assets/css/enterprise.css')?>" rel="stylesheet"><?php }?>
   <?php //外观设置里给当前外观单独配过颜色才有输出，没配就都是空的：
-  //先是整套换色（把这套外观用到的颜色全部按新主色重算），再是渐变角度等细节覆盖
+  //先是整套换色（把这套外观用到的所有颜色全部按新主色重算），再是渐变角度等细节覆盖
   echo theme_recolor_tag($site_theme);
   echo theme_gradient_style($site_theme);?>
   <!--[if lt IE 9]>
@@ -48,6 +52,105 @@ if(in_array($site_theme, $layout_themes, true)){
 }
 ?>
 <body class="<?php echo $body_class?>">
+
+<?php if($site_theme === 'enterprise'){ ?>
+<?php // ==================== 企业门户风：顶部导航 ====================
+//导航菜单与默认 navbar 同一套业务逻辑：入口显隐、高亮、登录态完全一致，
+//只是视觉换成深蓝渐变企业级顶栏（enterprise.css 提供样式）
+$ep_menu = [];
+$ep_menu[] = ['index,', './', 'fa-list', '文件列表'];
+$ep_menu[] = ['upload', './upload.php', 'fa-upload', '上传文件'];
+if(!isset($conf['sponsor_open']) || $conf['sponsor_open'] == 1){
+  //enterprise 非布局型外观，与默认 navbar 的非 layout 分支一致走独立赞助页目录；
+  //该 URL 无文件名，checkIfActive 取不到高亮，与原版一致不挂 active
+  $ep_menu[] = ['', './includes/sponsor/', 'fa-money', '赞助名单'];
+}
+if(function_exists('is_buy_open') && is_buy_open()){
+  $ep_menu[] = ['buy', './buy.php', 'fa-shopping-cart', '购买权限'];
+}
+if(!isset($conf['violation_open']) || $conf['violation_open'] == 1){
+  $ep_menu[] = ['violation', './violation.php', 'fa-gavel', '违规公示'];
+}
+if(!empty($is_file)){
+  $ep_menu[] = ['file', '', 'fa-file', '文件查看'];
+}
+?>
+<div class="ep-nav">
+  <div class="container">
+    <a class="ep-nav-brand" href="./"><i class="fa fa-cloud" aria-hidden="true"></i> <?php echo $conf['title']?></a>
+    <button type="button" class="ep-nav-toggle" id="epNavToggle" aria-label="展开菜单"><i class="fa fa-bars" aria-hidden="true"></i></button>
+    <nav class="ep-nav-menu" id="epNavMenu">
+      <?php foreach($ep_menu as $m){?>
+      <a href="<?php echo $m[1]?>" class="<?php echo checkIfActive($m[0])?>"><i class="fa <?php echo $m[2]?>" aria-hidden="true"></i> <?php echo $m[3]?></a>
+      <?php }?>
+      <span class="ep-nav-user" id="epNavUser">
+        <?php if($islogin2){?>
+        <a class="ep-user-btn" href="./user.php?tab=files"><i class="fa fa-folder-open" aria-hidden="true"></i> 我的文件</a>
+        <span class="ep-dropdown">
+          <a class="ep-user-btn" href="./user.php" data-ep-drop="1"><i class="fa fa-<?php echo $userrow['type']=='qq'?'qq':($userrow['type']=='mail'?'envelope':'wechat');?>" aria-hidden="true"></i> <?php echo $userrow['nickname']?><i class="fa fa-angle-down" aria-hidden="true"></i></a>
+          <ul class="ep-dropdown-menu">
+            <li><a href="./user.php"><i class="fa fa-user-circle" aria-hidden="true"></i> 个人中心</a></li>
+            <li><a href="./login.php?logout=1" onclick="return confirm('是否确定退出登录？')"><i class="fa fa-sign-out" aria-hidden="true"></i> 退出登录</a></li>
+          </ul>
+        </span>
+        <?php }else{?>
+        <a class="ep-user-btn" href="./?m=mine"><i class="fa fa-folder-open" aria-hidden="true"></i> 我的文件</a>
+        <?php if($conf['userlogin']){?>
+        <a class="ep-login-btn" href="./login.php"><i class="fa fa-user-circle" aria-hidden="true"></i> 登录 / 注册</a>
+        <?php }?>
+        <?php }?>
+      </span>
+    </nav>
+  </div>
+</div>
+<?php // ==================== 企业门户风：首页 Hero ====================
+//只在文件列表首页显示（搜索/我的文件等场景保持纯列表，避免把结果顶出视口），
+//统计走一次全表 count + sum，与默认首页的 numrows 查询同级开销
+//$kw 只在 index.php 定义，其它页面 include header.php 时用 $_GET['kw'] 判断，避免未定义变量
+$ep_is_home = (basename($_SERVER['SCRIPT_NAME']) === 'index.php' || basename($_SERVER['SCRIPT_NAME']) === 'index')
+  && empty($_GET['kw']) && (!isset($_GET['m']) || $_GET['m'] !== 'mine');
+if($ep_is_home){
+  //全表统计走 120 秒会话缓存，避免每次打开首页都扫三遍 pre_file
+  $ep_stat_key = 'ep_home_stat_'.date('YmdH');
+  $ep_stat = isset($_SESSION[$ep_stat_key]) ? $_SESSION[$ep_stat_key] : null;
+  if(!is_array($ep_stat) || empty($ep_stat['t']) || $ep_stat['t'] < time() - 120){
+    $ep_stat = [
+      't' => time(),
+      'files' => intval($DB->getColumn("SELECT count(*) from pre_file")),
+      'today' => intval($DB->getColumn("SELECT count(*) from pre_file WHERE addtime>='".date('Y-m-d 00:00:00')."'")),
+      'size' => floatval($DB->getColumn("SELECT sum(size) from pre_file")),
+    ];
+    $_SESSION[$ep_stat_key] = $ep_stat;
+  }
+?>
+<div class="ep-hero">
+  <div class="container">
+    <span class="ep-hero-kicker"><i class="fa fa-shield" aria-hidden="true"></i> 系统运行中</span>
+    <h1>安全 · 稳定 · 高效</h1>
+    <p>企业级文件外链分享平台：上传即得链接，随时随地分发下载。数据加密存储，7×24 小时稳定运行。</p>
+    <div class="ep-hero-actions">
+      <a class="ep-btn ep-btn-light" href="./upload.php"><i class="fa fa-cloud-upload" aria-hidden="true"></i> 立即上传</a>
+      <a class="ep-btn ep-btn-ghost" href="./?m=mine"><i class="fa fa-folder-open" aria-hidden="true"></i> 我的文件</a>
+    </div>
+    <div class="ep-hero-stats">
+      <div class="ep-hero-stat"><i class="fa fa-database" aria-hidden="true"></i><div><strong><?php echo number_format($ep_stat['files'])?></strong><span>文件总数</span></div></div>
+      <div class="ep-hero-stat"><i class="fa fa-cloud-upload" aria-hidden="true"></i><div><strong><?php echo number_format($ep_stat['today'])?></strong><span>今日上传</span></div></div>
+      <div class="ep-hero-stat"><i class="fa fa-hdd-o" aria-hidden="true"></i><div><strong><?php echo function_exists('size_format') ? size_format($ep_stat['size']) : '-'?></strong><span>存储用量</span></div></div>
+    </div>
+  </div>
+</div>
+<?php } ?>
+<script>
+//企业导航移动端展开/收起
+(function(){
+  var b = document.getElementById('epNavToggle'), m = document.getElementById('epNavMenu'), u = document.getElementById('epNavUser');
+  if(!b || !m) return;
+  b.addEventListener('click', function(){
+    m.classList.toggle('open'); if(u)u.classList.toggle('open');
+  });
+})();
+</script>
+<?php }else{ ?>
 
   <div class="navbar navbar-default">
     <div class="container">
@@ -163,5 +266,6 @@ if(in_array($site_theme, $layout_themes, true)){
   </div>
 <?php //蓝白工作台风的顶部搜索条：每个页面都有，所以放在这里而不是各页面自己输出
 if(in_array($site_theme, studio_family_keys(), true)){echo layout_render_studio_topbar();}?>
+<?php }?>
 
   <script src="includes/ads.php?v=<?php echo VERSION?>"></script>

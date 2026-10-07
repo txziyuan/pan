@@ -244,7 +244,8 @@ $grad_names = [
 	document.addEventListener('change', function(e){
 		var r = e.target;
 		if(!r || r.name !== 'site_theme' || r.type !== 'radio')return;
-		if(!SPECS[r.value])return;
+		//企业门户风等没有配色编辑器的外观：只勾选对应卡片，不切换配色下拉框
+		if(!SPECS[r.value]){ checkCard(r.value); return; }
 		sel.value = r.value;
 		checkCard(r.value);
 		render();
@@ -252,3 +253,28 @@ $grad_names = [
 	render();
 })();
 </script>
+<?php //企业门户风外观卡片：enterprise 没有配色编辑器（functions.php 未收录配色），
+      //放一张独立卡片在配色工具条下方，随 set.php 的表单一起提交即可切换。
+      //选中态看数据库原始值 $conf['site_theme']：set.php 顶部会把未知外观回退成 console，
+      //直接拿 $site_theme 判断，选了 enterprise 的站点这张卡片永远不亮 ?>
+<div class="appearance-options ep-appearance-options">
+  <?php $ep_selected = (isset($conf['site_theme']) && $conf['site_theme'] === 'enterprise');?>
+  <label class="appearance-card <?php echo $ep_selected ? 'active' : null;?>">
+    <input type="radio" name="site_theme" value="enterprise" <?php echo $ep_selected ? 'checked' : null;?>>
+    <span class="appearance-preview appearance-preview-enterprise">
+      <span class="appearance-nav"></span>
+      <span class="appearance-panel">
+        <span></span><span></span><span></span>
+      </span>
+    </span>
+    <strong>企业门户风</strong>
+    <small>品牌蓝渐变顶栏 + 首页横幅统计 + 卡片化文件列表，企业级前台模板，与后台登录页同一套视觉。</small>
+  </label>
+</div>
+<style>
+/* 企业门户风卡片：预览块用品牌蓝渐变示意顶栏 */
+.appearance-preview-enterprise{background:linear-gradient(135deg,#003eb3 0%,#1677ff 55%,#4096ff 100%)!important}
+.appearance-preview-enterprise .appearance-nav{background:rgba(255,255,255,.28)!important}
+.appearance-preview-enterprise .appearance-panel{background:#fff!important}
+.appearance-preview-enterprise .appearance-panel span{background:#c9dcf5!important}
+</style>
